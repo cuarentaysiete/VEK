@@ -35,19 +35,23 @@ Built to the specification in
 
 ## Installation
 
-UXP has no signed-distribution flow for local development; load the folder:
+**Development (recommended): Adobe UXP Developer Tool.**
 
-1. Copy this repository's folder (the one containing `manifest.json`)
-   somewhere permanent, e.g. `~/Plugins/vektorshop`.
-2. In Photoshop: **Window > Extensions > VektorShop** (or *Plugins*, depending
-   on locale/version). Select the `vektorshop` folder.
-3. The panel opens under **Window > Extensions > VektorShop Vectorscope**.
+1. Open the UXP Developer Tool (ships with the Creative Cloud app, or download
+   it from the Adobe UXP site) and select **Adobe Photoshop** as the host.
+   Photoshop must be running (or will be launched).
+2. **Action: Add Plugin** and pick this repository's folder - the one that
+   contains `manifest.json`.
+3. The panel appears under **Window > Extensions > VektorShop Vectorscope**.
+   Remove it again with **Action: Remove Plugin** when iterating.
 
-To uninstall, remove the entry in the same dialog.
+**Production-style load:** in Photoshop, **Window > Extensions > Other Scripts /
+Plugins** (naming varies by version), select the folder, and the panel opens
+under *Window > Extensions*. To uninstall, remove the entry in the same dialog.
 
-> Development tip: set the environment variable
-> `CEP_ENABLE_DEBUGGER=1` before launching Photoshop to inspect the panel in
-> the Chromium DevTools, or use *Window > Extensions > Developer Tools*.
+> Development tip: with the Developer Tool attached you can open the panel's
+> DevTools console (the UXP inspector) - the panel reports its error state in
+> the HUD status line and to that console.
 
 ## Usage
 
@@ -67,11 +71,15 @@ To uninstall, remove the entry in the same dialog.
 ## Architecture
 
 ```
-index.html        panel markup + Spectrum-style dark theme (hand-rolled CSS)
+index.html        panel markup
+style.css         Spectrum-style dark theme (hand-rolled; external file because
+                  UXP's default CSP forbids inline <style> blocks)
 main.js           orchestration: sampling pipeline, events, throttle, UI wiring
 src/ycbcr.js      BT.601 math, scope geometry, targets, I-line, tonal buckets
+src/sampling.js   ImData normalization + stride sampling (pure, unit-tested)
 src/stats.js      peak/avg saturation, dominant-hue histogram
 src/scope.js      ScopeView: canvas renderer (graticule cache, trace, heatmap)
+manifest.no-imaging.json  fallback manifest without the C++ imaging module
 ```
 
 ### Data pipeline (per refresh)
@@ -146,6 +154,39 @@ npm test            # runs test/unit.test.js (node:test, zero dependencies)
 
 Full behavior (event timing, imaging module, selection) requires the real
 Photoshop host; the DevTools workflow above is the practical loop.
+
+## Troubleshooting
+
+**"Invalid Manifest File" in the UXP Developer Tool.** The imaging API in
+Photoshop UXP is a *C++* module; it must be declared with its `cpp-*`
+feature flags, not as an empty object:
+
+```json
+"modules": {
+  "photoshop": { "scopes": ["app", "action", "core"] },
+  "imaging": {
+    "cpp-photostandard": true,
+    "cpp-photoshop": true,
+    "cpp-photoshop-composite": true
+  }
+}
+```
+
+(`core` is required for `toImagingDocument()` and `activeDocument`.) If your
+build still rejects the manifest, copy `manifest.no-imaging.json` over
+`manifest.json` to load the UI without pixel access, then paste the DevTools
+console output so we can isolate which flag your build dislikes.
+
+**Panel loads but the scope shows an error.** The HUD status line reports the
+ImData shape the host actually returned, e.g.
+`sampled in 42 ms - 512x341 bgra`. If red and blue look swapped, that value
+tells us the channel layout your build uses; extend `channelLayout()` in
+`src/sampling.js` accordingly.
+
+**Nothing updates while I paint.** Auto-updates subscribe to the UXP event
+notifier; some builds only fire `DOCUMENT_CHANGED` when the tool is released.
+The REFRESH button always works, and the 300 ms leading-edge throttle keeps
+it non-blocking.
 
 ## Roadmap
 

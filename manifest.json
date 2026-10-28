@@ -3,7 +3,7 @@
   "id": "net.vektorshop.vectorscope",
   "name": "VektorShop Vectorscope",
   "main": "index.html",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "requiredPhotoShopVersion": "23.0",
   "modal": false,
   "network": {
@@ -15,9 +15,13 @@
   ],
   "modules": {
     "photoshop": {
-      "scopes": ["app", "action"]
+      "scopes": ["app", "action", "core"]
     },
-    "imaging": {}
+    "imaging": {
+      "cpp-photostandard": true,
+      "cpp-photoshop": true,
+      "cpp-photoshop-composite": true
+    }
   },
   "entrypoints": [
     {

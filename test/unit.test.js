@@ -111,6 +111,10 @@ test('channel layout table', () => {
   assert.deepEqual(channelLayout('bgra'), { r: 2, g: 1, b: 0, step: 4 });
   assert.deepEqual(channelLayout('rgba'), { r: 0, g: 1, b: 2, step: 4 });
   assert.deepEqual(channelLayout('gray'), { r: 0, g: 0, b: 0, step: 1 });
+  // C++ binding variants: uppercase enum name, enum-like object, unknown
+  assert.deepEqual(channelLayout('BGRA'), { r: 2, g: 1, b: 0, step: 4 });
+  assert.deepEqual(channelLayout({ name: 'RGBA' }), { r: 0, g: 1, b: 2, step: 4 });
+  assert.equal(channelLayout(undefined).step, 4);
 });
 
 test('stride downsample halves a 100px image at sampleSize 50', () => {

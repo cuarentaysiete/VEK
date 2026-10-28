@@ -17,18 +17,24 @@ const _yc = (typeof module !== 'undefined' && typeof require === 'function')
   ? require('./ycbcr.js')
   : globalThis;
 
-/** Channel byte offsets for the channelOrder strings Photoshop may report. */
+/**
+ * Channel byte offsets for the channelOrder value Photoshop reports.
+ * Lenient on purpose: the C++ ImData binding may hand back a lowercase
+ * string, an enum-like object, or an enum name such as "BGRA".
+ */
 function channelLayout(order) {
-  const c = (order || 'rgba').toLowerCase();
-  if (c === 'bgra')   return { r: 2, g: 1, b: 0, step: 4 };
-  if (c === 'bgr')    return { r: 2, g: 1, b: 0, step: 3 };
-  if (c === 'argb')   return { r: 2, g: 1, b: 0, step: 4 };
-  if (c === 'abgr')   return { r: 1, g: 0, b: 3, step: 4 };
-  if (c === 'gray')   return { r: 0, g: 0, b: 0, step: 1 };
-  if (c === 'graya')  return { r: 0, g: 0, b: 0, step: 2 };
-  if (c === 'rgba')   return { r: 0, g: 1, b: 2, step: 4 };
-  if (c === 'rgb')    return { r: 0, g: 1, b: 2, step: 3 };
-  return { r: 0, g: 1, b: 2, step: c.length >= 4 ? 4 : 3 };
+  let c;
+  if (typeof order === 'string') c = order.toLowerCase();
+  else if (order && typeof order === 'object') c = String(order.name || order.value || '').toLowerCase();
+  else c = '';
+  if (c.includes('bgra'))   return { r: 2, g: 1, b: 0, step: 4 };
+  if (c.includes('argb'))   return { r: 2, g: 1, b: 0, step: 4 };
+  if (c.includes('abgr'))   return { r: 1, g: 0, b: 3, step: 4 };
+  if (c.includes('rgba'))   return { r: 0, g: 1, b: 2, step: 4 };
+  if (c.includes('bgr'))    return { r: 2, g: 1, b: 0, step: 3 };
+  if (c.includes('rgb'))    return { r: 0, g: 1, b: 2, step: 3 };
+  if (c.includes('gray') || c.includes('y8') || c === 'y') return { r: 0, g: 0, b: 0, step: 1 };
+  return { r: 0, g: 1, b: 2, step: 4 }; // best guess, reported in the HUD
 }
 
 /**

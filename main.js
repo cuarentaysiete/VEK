@@ -23,7 +23,10 @@
 (() => {
   const photoshop = require('@photoshop');
   const { app, action } = photoshop;
-  const imaging = require('@photoshop/imaging'); // referenced for API contract clarity
+  const core = photoshop.core || {};
+  // NOTE: @photoshop/imaging is a C++ module in Photoshop UXP; it is declared
+  // in manifest.json with cpp-* flags and reached through toImagingDocument(),
+  // not via a JS require.
 
   // ------------------------------------------------------------------
   // Configuration
@@ -153,15 +156,22 @@
    * `cleanup` restores the original document state (activate + close proxy).
    */
   async function acquireImDocument(doc) {
+    if (typeof doc.toImagingDocument !== 'function') {
+      throw new Error("toImagingDocument() missing - check the 'core' manifest scope and Photoshop version");
+    }
     const px = doc.width * doc.height;
     if (px <= MAX_DIRECT_PIXELS) {
       return { im: await doc.toImagingDocument(), cleanup: () => {} };
     }
 
     const res = action.batchPlay([{ _object: 'duplicate', _class: 'document' }])[0];
-    let dup;
+    let dup = null;
     try {
-      dup = photoshop.core.document.getByName(res && res.name);
+      if (core.document && typeof core.document.getByName === 'function') {
+        dup = core.document.getByName(res && res.name);
+      } else {
+        dup = (app.documents || []).find((d) => d.name === (res && res.name));
+      }
     } catch (e) {
       dup = null;
     }
@@ -251,6 +261,25 @@
     }
   }
 
+  /**
+   * Normalize whatever the imaging binding returns into the plain
+   * { width, height, channelOrder, data } shape sampling.js expects.
+   * The C++ ImData JS binding may expose values as getters or methods,
+   * and channelOrder may be a string or an enum-like object, so be lenient
+   * and report what we saw (the status bar shows it after the first read).
+   */
+  function normalizeImData(d) {
+    if (!d) return null;
+    const data = d.data || (typeof d.getData === 'function' ? d.getData() : null);
+    if (!data) {
+      throw new Error('ImData has no readable pixel buffer (keys: ' + Object.keys(d).slice(0, 8).join(', ') + ')');
+    }
+    let order = d.channelOrder;
+    if (order && typeof order !== 'string') order = String(order.name || order.value || order);
+    if (typeof order !== 'string') order = 'rgba';
+    return { width: d.width, height: d.height, channelOrder: order, data, raw: d };
+  }
+
   // ------------------------------------------------------------------
   // Refresh pipeline
   // ------------------------------------------------------------------
@@ -274,13 +303,17 @@
       let imData = null;
       try {
         if (state.source === 'layer') {
-          const layer = im.getActiveLayer();
+          const layer = im.getActiveLayer ? im.getActiveLayer() : null;
           const ld = layer && layer.getPixelData ? layer.getPixelData() : null;
-          if (!ld || !ld.width || !ld.height) throw new Error('Active layer has no pixel data (use Composite)');
-          imData = ld;
+          imData = normalizeImData(ld);
+          if (!imData || !imData.width || !imData.height) {
+            throw new Error('Active layer has no pixel data (try Composite)');
+          }
         } else {
-          if (typeof im.getPixelData !== 'function') throw new Error('Composite read not supported by this Photoshop build');
-          imData = im.getPixelData();
+          if (typeof im.getPixelData !== 'function') {
+            throw new Error('Composite read not available in this build (try "Active layer only")');
+          }
+          imData = normalizeImData(im.getPixelData());
         }
         const total = sampleIntoDoc(imData, sel, doc.width, doc.height);
         const ms = performance.now() - t0;
@@ -303,10 +336,12 @@
           : [buffers[state.tonal === 'shadows' ? 0 : state.tonal === 'mids' ? 1 : 2]];
         const stats = computeStats(statBufs);
         updateHud(stats, ms, state.sampleSize);
-        setStatus(total > 0 ? `sampled in ${Math.round(ms)} ms` : 'no pixels in range', total > 0 ? '' : 'error');
+        setStatus(total > 0
+          ? `sampled in ${Math.round(ms)} ms - ${imData.width}x${imData.height} ${imData.channelOrder}`
+          : 'no pixels in range', total > 0 ? '' : 'error');
       } finally {
         // Memory policy: release imaging objects as soon as sampling is done.
-        if (imData && typeof imData.dispose === 'function') imData.dispose();
+        if (imData && imData.raw && typeof imData.raw.dispose === 'function') imData.raw.dispose();
         if (typeof im.dispose === 'function') im.dispose();
       }
     } catch (e) {
