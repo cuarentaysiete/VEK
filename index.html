@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VektorShop Vectorscope</title>
+  <style>
+    /*
+     * Spectrum-style dark theme, hand-rolled.
+     *
+     * Note: the Adobe prompt suggests Spectrum Web Components. Bundling the
+     * full @adobe/spectrum-web-components package (hundreds of KB of MDC
+     * files) for a handful of controls would bloat the plugin and slow UXP
+     * startup, so we reproduce the Spectrum dark visual language in plain
+     * CSS instead. Behavior is identical, footprint is ~4 KB.
+     */
+    :root {
+      --bg: #1e1f22;
+      --panel: #26272b;
+      --panel-2: #2e2f35;
+      --line: #3a3b42;
+      --text: #d9d9d9;
+      --text-dim: #8b8d93;
+      --accent: #3290e1;
+      --accent-dim: #2a6fb0;
+      --warn: #f5b453;
+      --good: #6dffa0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font: 12px "Adobe Clean", "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+    body { display: flex; flex-direction: column; }
+
+    header {
+      display: flex; align-items: baseline; gap: 8px;
+      padding: 8px 10px 6px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    header h1 {
+      font-size: 12px; letter-spacing: 0.18em; font-weight: 600;
+      color: var(--text);
+    }
+    header h1 b { color: var(--accent); font-weight: 700; }
+    #doc-info { font-size: 10px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    main { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 8px; gap: 8px; }
+
+    /* ---- scope area ------------------------------------------------- */
+    #scope-area { flex: 1; min-height: 0; display: flex; }
+    .scope-wrap {
+      flex: 1; min-width: 0; min-height: 0;
+      position: relative;
+      background: #131418;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .scope-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    .scope-tag {
+      position: absolute; top: 4px; left: 6px;
+      font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--text-dim); pointer-events: none;
+    }
+    #scope-split { display: none; gap: 8px; }
+    body[data-layout="split"] #scope-single { display: none; }
+    body[data-layout="split"] #scope-split { display: flex; }
+    .hidden { display: none !important; }
+
+    /* ---- HUD --------------------------------------------------------- */
+    #hud {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 2px 10px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+      font-size: 10.5px;
+      line-height: 1.5;
+    }
+    #hud .k { color: var(--text-dim); }
+    #hud .v { color: var(--text); }
+    #hud .v.warn { color: var(--warn); }
+    #status {
+      grid-column: 1 / -1;
+      color: var(--text-dim);
+      min-height: 14px;
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    }
+    #status.busy { color: var(--accent); }
+    #status.error { color: var(--warn); }
+
+    /* ---- controls ----------------------------------------------------- */
+    #controls {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      padding: 8px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      align-items: center;
+    }
+    .ctl { display: flex; flex-direction: column; gap: 3px; }
+    .ctl > label, .ctl > .lbl {
+      font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    button, select {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      padding: 5px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+    button:active, .seg button.on { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
+    select { padding: 4px 6px; }
+    .seg { display: flex; }
+    .seg button { border-radius: 0; border-right-width: 0; }
+    .seg button:first-child { border-radius: 3px 0 0 3px; }
+    .seg button:last-child  { border-radius: 0 3px 3px 0; border-right-width: 1px; }
+    .toggle { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; cursor: pointer; }
+    .toggle input { accent-color: var(--accent); cursor: pointer; }
+
+    #btn-refresh {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      min-width: 90px;
+    }
+    #btn-refresh:disabled { opacity: 0.5; cursor: default; }
+  </style>
+</head>
+<body data-layout="single">
+
+  <header>
+    <h1><b>VEKTOR</b>SHOP</h1>
+    <span id="doc-info">no document</span>
+  </header>
+
+  <main>
+    <section id="scope-area">
+      <div id="scope-single" class="scope-wrap">
+        <span class="scope-tag" id="tag-single">global</span>
+        <canvas id="scope-main"></canvas>
+      </div>
+      <div id="scope-split">
+        <div class="scope-wrap"><span class="scope-tag">shadows</span><canvas id="scope-shadows"></canvas></div>
+        <div class="scope-wrap"><span class="scope-tag">midtones</span><canvas id="scope-mids"></canvas></div>
+        <div class="scope-wrap"><span class="scope-tag">highlights</span><canvas id="scope-highlights"></canvas></div>
+      </div>
+    </section>
+
+    <section id="hud">
+      <span class="k">PEAK SAT</span><span class="v" id="hud-peak">&ndash;</span>
+      <span class="k">AVG SAT</span><span class="v" id="hud-avg">&ndash;</span>
+      <span class="k">DOMINANT</span><span class="v" id="hud-hues">&ndash;</span>
+      <span class="k">SAMPLES</span><span class="v" id="hud-samples">&ndash;</span>
+      <span id="status">ready</span>
+    </section>
+
+    <section id="controls">
+      <button id="btn-refresh" title="Force a fresh sample of the document">REFRESH</button>
+
+      <label class="toggle"><input type="checkbox" id="chk-auto" checked> auto</label>
+
+      <div class="ctl">
+        <label for="sel-source">source</label>
+        <select id="sel-source">
+          <option value="composite" selected>Composite (entire image)</option>
+          <option value="layer">Active layer only</option>
+        </select>
+      </div>
+
+      <div class="ctl">
+        <span class="lbl">tonal</span>
+        <div class="seg" id="seg-tonal" data-value="global">
+          <button data-value="global" class="on">Global</button>
+          <button data-value="shadows">Shadows</button>
+          <button data-value="mids">Mids</button>
+          <button data-value="highlights">Highlights</button>
+        </div>
+      </div>
+
+      <div class="ctl">
+        <span class="lbl">layout</span>
+        <div class="seg" id="seg-layout" data-value="single">
+          <button data-value="single" class="on">Single</button>
+          <button data-value="split">Split</button>
+        </div>
+      </div>
+
+      <div class="ctl">
+        <span class="lbl">zoom</span>
+        <div class="seg" id="seg-zoom" data-value="1">
+          <button data-value="1" class="on">1x</button>
+          <button data-value="2">2x</button>
+          <button data-value="4">4x</button>
+        </div>
+      </div>
+
+      <div class="ctl">
+        <span class="lbl">sample</span>
+        <div class="seg" id="seg-sample" data-value="256">
+          <button data-value="256" class="on">256</button>
+          <button data-value="512">512</button>
+        </div>
+      </div>
+
+      <div class="ctl">
+        <span class="lbl">plot</span>
+        <div class="seg" id="seg-mode" data-value="trace">
+          <button data-value="trace" class="on">Trace</button>
+          <button data-value="heatmap">Heatmap</button>
+        </div>
+      </div>
+
+      <label class="toggle"><input type="checkbox" id="chk-iline" checked> I-line</label>
+    </section>
+  </main>
+
+  <script src="src/ycbcr.js"></script>
+  <script src="src/sampling.js"></script>
+  <script src="src/stats.js"></script>
+  <script src="src/scope.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
