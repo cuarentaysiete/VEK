@@ -7,9 +7,6 @@ selection, or one tonal range) plotted as Cr/Cb cloud, with phosphor-trace
 or false-color density rendering, a skin-tone I-line, center zoom for
 white-balance work, and a live statistics HUD.
 
-Built to the specification in
-[`docs/photoshop_uxp_vectorscope_prompt.md`](docs/photoshop_uxp_vectorscope_prompt.md).
-
 ---
 
 ## Features
