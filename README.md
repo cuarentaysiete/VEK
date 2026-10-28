@@ -1,4 +1,4 @@
-# VektorShop, a vectorscope for Photoshop
+# VEK, a vectorscope for Photoshop
 
 A  **vectorscope** panel for Adobe Photoshop, built on the **UXP**
 extension platform. It gives still-image colorists the circular color-space
@@ -42,7 +42,7 @@ Built to the specification in
    Photoshop must be running (or will be launched).
 2. **Action: Add Plugin** and pick this repository's folder - the one that
    contains `manifest.json`.
-3. The panel appears under **Window > Extensions > VektorShop Vectorscope**.
+3. The panel appears under **Window > Extensions > VEK**.
    Remove it again with **Action: Remove Plugin** when iterating.
 
 **Production-style load:** in Photoshop, **Window > Extensions > Other Scripts /

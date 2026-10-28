@@ -1,7 +1,7 @@
 {
-  "id": "net.vektorshop.vectorscope",
-  "name": "VektorShop Vectorscope",
-  "version": "0.3.2",
+  "id": "net.vek.vectorscope",
+  "name": "VEK",
+  "version": "0.4.0",
   "main": "index.html",
   "host": {
     "app": "PS",
@@ -14,9 +14,9 @@
   "entrypoints": [
     {
       "type": "panel",
-      "id": "vektorshop.panel",
+      "id": "vek.panel",
       "label": {
-        "default": "VektorShop Vectorscope"
+        "default": "VEK"
       },
       "minimumSize": { "width": 320, "height": 360 },
       "maximumSize": { "width": 900, "height": 1200 },

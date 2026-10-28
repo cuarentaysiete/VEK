@@ -1,5 +1,5 @@
 /**
- * main.js - VektorShop Vectorscope orchestration.
+ * main.js - VEK (vectorscope panel) orchestration.
  *
  * Pipeline (per refresh):
  *   1. Resolve the active document and any active selection bounds.
