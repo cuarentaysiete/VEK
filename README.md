@@ -1,4 +1,4 @@
-# VektorShop, a vectorscope for Photoshop
+# VEK, a vectorscope for Photoshop
 
 A  **vectorscope** panel for Adobe Photoshop, built on the **UXP**
 extension platform. It gives still-image colorists the circular color-space
