@@ -76,19 +76,21 @@ style.css         Spectrum-style dark theme (hand-rolled; external file because
                   UXP's default CSP forbids inline <style> blocks)
 main.js           orchestration: sampling pipeline, events, throttle, UI wiring
 src/ycbcr.js      BT.601 math, scope geometry, targets, I-line, tonal buckets
-src/sampling.js   ImData normalization + stride sampling (pure, unit-tested)
+src/sampling.js   pixel buffer normalization + stride sampling (pure, unit-tested)
 src/stats.js      peak/avg saturation, dominant-hue histogram
 src/scope.js      ScopeView: canvas renderer (graticule cache, trace, heatmap)
-manifest.no-imaging.json  fallback manifest without the C++ imaging module
+icons/            panel icons referenced by the manifest
 ```
 
 ### Data pipeline (per refresh)
 
 ```
-Photoshop doc --toImagingDocument--> ImDocument
-   |  (> 8 Mpx docs: duplicated, resized to <= 512 px, read, closed unsaved)
+Photoshop doc --imaging.getPixels({targetSize})--> PhotoshopImageData
+   |  (Photoshop downscales server-side; buffer long edge = sample size,
+   |   so full-resolution data is never materialized; pyramid cache used
+   |   when available - the returned level is shown in the status bar)
    v
-ImData (Int32Array, 8-bit) --stride downsample--> RGB samples (<= 256x256 / 512x512)
+8-bit chunky pixels --stride guard--> RGB samples (<= 256x256 / 512x512)
    v
 RGB -> YCbCr (BT.601):  x = Cr/0.5, y = Cb/0.5,  luma = Y
    v
@@ -96,32 +98,39 @@ selection-bounds filter --> tonal bucket split (shadows / mids / highlights)
    v
 ScopeView render (trace or heatmap, zoomed) + statistics HUD
    v
-ImData / ImDocument released immediately after use
+imageData.dispose() immediately after the sampling pass
 ```
+
+All imaging calls run inside `core.executeAsModal()` (apiVersion 2, the
+modal JavaScript paradigm).
 
 ### Memory management
 
-* The Photoshop imaging API has no server-side downsample, so documents above
-  8 megapixels are **duplicated and resized to a 512 px proxy** before pixel
-  read; the proxy is closed without saving and the original re-activated.
-  Full-resolution buffers are never materialized (prompt item 1, Phase 1).
-* `ImData` / `ImDocument` handles are `dispose()`-d (where the API exposes it)
-  and dereferenced as soon as the sampling pass finishes.
+* `imaging.getPixels()` does the downscale **on the Photoshop side**; the
+  JavaScript heap only ever holds a buffer whose long edge is the selected
+  sample size (256 or 512 px) - at most ~1 MB for 512 px RGB. Full-resolution
+  buffers are never materialized (prompt item 1, Phase 1).
+* The `PhotoshopImageData` handle is `dispose()`-d as soon as the sampling
+  pass finishes; `getData()` is awaited inside a `try/finally` so the handle
+  is released even when the read fails.
 * All per-pixel work writes into **pre-allocated, reusable** `Float32Array`
   buckets; the hot loop performs zero allocations.
 * Rendering is synchronous Canvas 2D but bounded (a 512 sample is 262 k
-  points worst case, typically far less after striding), so the JS main
-  thread never blocks for more than a frame or two - satisfying the
-  "no UI freeze" constraint (prompt: Deliverables, item 4).
+  points worst case), so the JS main thread never blocks for more than a
+  frame or two - satisfying the "no UI freeze" constraint (prompt:
+  Deliverables, item 4).
 
 ### Design decisions & deviations from the prompt
 
 The prompt is a brief, not a runnable spec; where it was ambiguous or
 physically impossible in UXP, these decisions were made:
 
-1. **Downsampling.** `@photoshop/imaging` exposes no downsampled
-   `getPixels()`. We honor the *intent* (never materialize full-res
-   buffers, bounded CPU) via the scaled-copy proxy + CPU stride sampling.
+1. **Downsampling.** `imaging.getPixels()` accepts a `targetSize`, so
+   Photoshop downscales the pixels before they reach JavaScript; the CPU
+   stride pass is kept only as a guard (and for the 256 preset). This is
+   exactly the "downsampled proxy" the prompt asks for, done natively.
+   The buffer is requested in 8-bit RGB (matted on white), which is the
+   correct depth for scope work.
 2. **Spectrum Web Components.** Bundling the full `@adobe/spectrum-web-components`
    package (~hundreds of KB, many files) for five controls would bloat the
    plugin and slow UXP startup. The dark theme reproduces Spectrum's visual
@@ -157,30 +166,24 @@ Photoshop host; the DevTools workflow above is the practical loop.
 
 ## Troubleshooting
 
-**"Invalid Manifest File" in the UXP Developer Tool.** The imaging API in
-Photoshop UXP is a *C++* module; it must be declared with its `cpp-*`
-feature flags, not as an empty object:
+**"Invalid Manifest File" in the UXP Developer Tool.** The manifest must use
+`manifestVersion: 5` with a *host object* (not an array) and the Photoshop
+`data.apiVersion: 2` flag; the imaging API is reached through the regular
+`photoshop` module, so no `modules` section is needed:
 
 ```json
-"modules": {
-  "photoshop": { "scopes": ["app", "action", "core"] },
-  "imaging": {
-    "cpp-photostandard": true,
-    "cpp-photoshop": true,
-    "cpp-photoshop-composite": true
-  }
-}
+"host": { "app": "PS", "minVersion": "23.3.0", "data": { "apiVersion": 2 } },
+"manifestVersion": 5
 ```
 
-(`core` is required for `toImagingDocument()` and `activeDocument`.) If your
-build still rejects the manifest, copy `manifest.no-imaging.json` over
-`manifest.json` to load the UI without pixel access, then paste the DevTools
-console output so we can isolate which flag your build dislikes.
+If your build still rejects it, lower `minVersion` to `"23.0"` and confirm the
+panel loads in *Window > Extensions* inside Photoshop itself (the Developer
+Tool validates a slightly different schema than the host).
 
 **Panel loads but the scope shows an error.** The HUD status line reports the
-ImData shape the host actually returned, e.g.
-`sampled in 42 ms - 512x341 bgra`. If red and blue look swapped, that value
-tells us the channel layout your build uses; extend `channelLayout()` in
+buffer the host actually returned, e.g.
+`sampled in 42 ms - 512x341 RGB lvl1`. If red and blue look swapped, that
+value tells us the channel layout your build uses; extend `channelLayout()` in
 `src/sampling.js` accordingly.
 
 **Nothing updates while I paint.** Auto-updates subscribe to the UXP event

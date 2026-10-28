@@ -33,7 +33,7 @@ function channelLayout(order) {
   if (c.includes('rgba'))   return { r: 0, g: 1, b: 2, step: 4 };
   if (c.includes('bgr'))    return { r: 2, g: 1, b: 0, step: 3 };
   if (c.includes('rgb'))    return { r: 0, g: 1, b: 2, step: 3 };
-  if (c.includes('gray') || c.includes('y8') || c === 'y') return { r: 0, g: 0, b: 0, step: 1 };
+  if (c.includes('gray')) return { r: 0, g: 0, b: 0, step: c.includes('alpha') ? 2 : 1 };
   return { r: 0, g: 1, b: 2, step: 4 }; // best guess, reported in the HUD
 }
 

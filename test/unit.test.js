@@ -110,7 +110,9 @@ function freshBuffers(n) {
 test('channel layout table', () => {
   assert.deepEqual(channelLayout('bgra'), { r: 2, g: 1, b: 0, step: 4 });
   assert.deepEqual(channelLayout('rgba'), { r: 0, g: 1, b: 2, step: 4 });
-  assert.deepEqual(channelLayout('gray'), { r: 0, g: 0, b: 0, step: 1 });
+  assert.deepEqual(channelLayout('rgb'), { r: 0, g: 1, b: 2, step: 3 });
+  assert.deepEqual(channelLayout('grayscale'), { r: 0, g: 0, b: 0, step: 1 });
+  assert.deepEqual(channelLayout('grayscalealpha'), { r: 0, g: 0, b: 0, step: 2 });
   // C++ binding variants: uppercase enum name, enum-like object, unknown
   assert.deepEqual(channelLayout('BGRA'), { r: 2, g: 1, b: 0, step: 4 });
   assert.deepEqual(channelLayout({ name: 'RGBA' }), { r: 0, g: 1, b: 2, step: 4 });

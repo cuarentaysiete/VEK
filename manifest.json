@@ -1,39 +1,35 @@
 {
-  "manifestVersion": 5,
   "id": "net.vektorshop.vectorscope",
   "name": "VektorShop Vectorscope",
+  "version": "0.3.0",
   "main": "index.html",
-  "version": "0.2.0",
-  "requiredPhotoShopVersion": "23.0",
-  "modal": false,
-  "network": {
-    "domains": ["never"]
-  },
-  "permissions": [
-    "dom",
-    "lob"
-  ],
-  "modules": {
-    "photoshop": {
-      "scopes": ["app", "action", "core"]
-    },
-    "imaging": {
-      "cpp-photostandard": true,
-      "cpp-photoshop": true,
-      "cpp-photoshop-composite": true
+  "host": {
+    "app": "PS",
+    "minVersion": "23.3.0",
+    "data": {
+      "apiVersion": 2
     }
   },
+  "manifestVersion": 5,
   "entrypoints": [
     {
       "type": "panel",
-      "id": "vektorshop.vectorscope.panel",
+      "id": "vektorshop.panel",
       "label": {
         "default": "VektorShop Vectorscope"
       },
-      "minimumSize": [320, 360],
-      "maximumSize": [900, 1200],
-      "preferredWidth": 420,
-      "preferredHeight": 700
+      "minimumSize": { "width": 320, "height": 360 },
+      "maximumSize": { "width": 900, "height": 1200 },
+      "preferredDockedSize": { "width": 420, "height": 700 },
+      "preferredFloatingSize": { "width": 460, "height": 720 },
+      "icons": [
+        { "width": 23, "height": 23, "path": "icons/dark.png", "scale": [1, 2], "theme": ["darkest", "dark", "medium"] },
+        { "width": 23, "height": 23, "path": "icons/light.png", "scale": [1, 2], "theme": ["lightest", "light"] }
+      ]
     }
+  ],
+  "icons": [
+    { "width": 23, "height": 23, "path": "icons/dark.png", "scale": [1, 2], "theme": ["darkest", "dark", "medium"] },
+    { "width": 23, "height": 23, "path": "icons/light.png", "scale": [1, 2], "theme": ["lightest", "light"] }
   ]
 }

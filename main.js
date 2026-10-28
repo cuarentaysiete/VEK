@@ -3,36 +3,36 @@
  *
  * Pipeline (per refresh):
  *   1. Resolve the active document and any active selection bounds.
- *   2. Acquire an ImDocument. Documents whose pixel count exceeds
- *      MAX_DIRECT_PIXELS are duplicated and resized down to PROXY_MAX,
- *      so a full-resolution buffer is never materialized (the prompt's
- *      "downsampled proxy" requirement; the imaging API itself has no
- *      downsample option, hence the scaled-copy trick). The proxy is
- *      closed without saving and the original re-activated afterwards.
- *   3. Read pixels via the @photoshop/imaging API only (ImData).
- *   4. Stride-downsample, convert RGB -> YCbCr (BT.601), split into
+ *   2. Read pixels via the Photoshop imaging API ONLY, using
+ *      imaging.getPixels() with a targetSize so Photoshop downscales
+ *      server-side: the buffer is always <= the sample size (256/512 px
+ *      long edge). Full-resolution buffers are never materialized and no
+ *      document duplication/resizing via the action manager is needed.
+ *   3. Stride-sample (guard), convert RGB -> YCbCr (BT.601), split into
  *      tonal buckets, filter by selection.
- *   5. Render scope views, compute statistics, dispose everything.
+ *   4. Render scope views, compute statistics, dispose the image data.
  *
- * Memory policy: ImData / ImDocument references are dropped (and dispose()
- * called where the API offers it) immediately after the sampling pass; the
- * typed arrays handed to rendering are the reusable buffers below, never
- * copies of the document buffer.
+ * Memory policy: the PhotoshopImageData handle is dispose()-d as soon as the
+ * sampling pass finishes; the typed arrays handed to rendering are reusable
+ * buffers, never copies of the document buffer.
  */
 'use strict';
 (() => {
-  const photoshop = require('@photoshop');
+  // Photoshop UXP exposes every API (app, action, core, imaging) on the
+  // single 'photoshop' module; '@photoshop/*' paths are fallbacks for
+  // older builds.
+  let photoshop;
+  try { photoshop = require('photoshop'); }
+  catch (e) { photoshop = require('@photoshop'); }
   const { app, action } = photoshop;
   const core = photoshop.core || {};
-  // NOTE: @photoshop/imaging is a C++ module in Photoshop UXP; it is declared
-  // in manifest.json with cpp-* flags and reached through toImagingDocument(),
-  // not via a JS require.
+  const imaging = photoshop.imaging || (typeof require === 'function' ? (function () {
+    try { return require('@photoshop/imaging'); } catch (e) { return null; }
+  })() : null);
 
   // ------------------------------------------------------------------
   // Configuration
   // ------------------------------------------------------------------
-  const MAX_DIRECT_PIXELS = 8 * 1000 * 1000; // ~32 MB u8 buffer ceiling
-  const PROXY_MAX = 512;                      // long edge of the scaled copy
   const THROTTLE_MS = 300;                    // minimum spacing between samples
 
   const state = {
@@ -123,6 +123,15 @@
     }
   }
 
+  /**
+   * Run a function inside Photoshop's modal JavaScript scope (apiVersion 2).
+   * Falls back to a plain call on builds without executeAsModal.
+   */
+  function runModal(fn) {
+    if (typeof core.executeAsModal === 'function') return core.executeAsModal(fn);
+    return fn();
+  }
+
   // ------------------------------------------------------------------
   // Selection bounds (original document, pixels)
   // ------------------------------------------------------------------
@@ -139,64 +148,6 @@
     } catch (e) {
       return null;
     }
-  }
-
-  // ------------------------------------------------------------------
-  // ImDocument acquisition (with scaled proxy for large documents)
-  // ------------------------------------------------------------------
-  function safeCloseProxy(dup, original) {
-    try { action.batchPlay([{ _object: 'select', _class: 'document', document: original.id }]); }
-    catch (e) { /* keep going */ }
-    try { action.batchPlay([{ _object: 'close', _class: 'document', silent: true }]); }
-    catch (e) { /* keep going */ }
-  }
-
-  /**
-   * Returns { im, cleanup() }.
-   * `cleanup` restores the original document state (activate + close proxy).
-   */
-  async function acquireImDocument(doc) {
-    if (typeof doc.toImagingDocument !== 'function') {
-      throw new Error("toImagingDocument() missing - check the 'core' manifest scope and Photoshop version");
-    }
-    const px = doc.width * doc.height;
-    if (px <= MAX_DIRECT_PIXELS) {
-      return { im: await doc.toImagingDocument(), cleanup: () => {} };
-    }
-
-    const res = action.batchPlay([{ _object: 'duplicate', _class: 'document' }])[0];
-    let dup = null;
-    try {
-      if (core.document && typeof core.document.getByName === 'function') {
-        dup = core.document.getByName(res && res.name);
-      } else {
-        dup = (app.documents || []).find((d) => d.name === (res && res.name));
-      }
-    } catch (e) {
-      dup = null;
-    }
-    if (!dup) {
-      // Duplicate may have failed outright, or getByName missed it.
-      safeCloseProxy(app.activeDocument, doc);
-      throw new Error('Could not create a proxy copy of the document');
-    }
-
-    let im;
-    try {
-      const factor = (PROXY_MAX / Math.max(doc.width, doc.height)) * 100;
-      action.batchPlay([{
-        _object: 'resize',
-        _class: 'image',
-        vertical: { _unit: 'percent', _value: factor },
-        horizontal: { _unit: 'percent', _value: factor },
-        interpolate: 'bicubic'
-      }], { synchronizePosition: false });
-      im = await dup.toImagingDocument();
-    } catch (e) {
-      safeCloseProxy(dup, doc);
-      throw e;
-    }
-    return { im, cleanup: () => safeCloseProxy(dup, doc) };
   }
 
   // ------------------------------------------------------------------
@@ -262,22 +213,44 @@
   }
 
   /**
-   * Normalize whatever the imaging binding returns into the plain
-   * { width, height, channelOrder, data } shape sampling.js expects.
-   * The C++ ImData JS binding may expose values as getters or methods,
-   * and channelOrder may be a string or an enum-like object, so be lenient
-   * and report what we saw (the status bar shows it after the first read).
+   * Read (downsampled) pixels of the active document (or the active layer)
+   * through the imaging API. Photoshop performs the downscale server-side
+   * via targetSize, so the returned buffer is small by construction.
+   *
+   * Returns { width, height, channelOrder, data, pixelFormat, level } or
+   * null when the read produced no pixels.
    */
-  function normalizeImData(d) {
-    if (!d) return null;
-    const data = d.data || (typeof d.getData === 'function' ? d.getData() : null);
-    if (!data) {
-      throw new Error('ImData has no readable pixel buffer (keys: ' + Object.keys(d).slice(0, 8).join(', ') + ')');
+  async function readPixels(doc, layerId) {
+    const opts = {
+      documentID: doc.id,
+      colorSpace: 'RGB',
+      componentSize: 8,
+      applyAlpha: true
+    };
+    if (typeof layerId === 'number') opts.layerID = layerId;
+    // Ask for the sample size directly; a single dimension keeps aspect ratio.
+    if (doc.width >= doc.height) opts.targetSize = { width: state.sampleSize };
+    else opts.targetSize = { height: state.sampleSize };
+
+    const obj = await runModal(async () => imaging.getPixels(opts));
+    const img = obj && obj.imageData;
+    if (!img) return null;
+    let norm;
+    try {
+      const data = await img.getData({ chunky: true });
+      norm = {
+        width: img.width,
+        height: img.height,
+        channelOrder: img.pixelFormat || img.channelOrder || '',
+        data,
+        pixelFormat: img.pixelFormat || '',
+        level: obj && obj.level != null ? obj.level : -1
+      };
+    } finally {
+      if (typeof img.dispose === 'function') img.dispose();
     }
-    let order = d.channelOrder;
-    if (order && typeof order !== 'string') order = String(order.name || order.value || order);
-    if (typeof order !== 'string') order = 'rgba';
-    return { width: d.width, height: d.height, channelOrder: order, data, raw: d };
+    if (!norm.data || !norm.width || !norm.height) return null;
+    return norm;
   }
 
   // ------------------------------------------------------------------
@@ -288,66 +261,72 @@
     setBusy(true);
     setStatus('sampling...');
     const t0 = performance.now();
-    let acq = null;
+    let norm = null;
     try {
       const doc = app.activeDocument;
       if (!doc) {
         setStatus('No document open', 'error');
         return;
       }
+      if (!imaging || typeof imaging.getPixels !== 'function') {
+        setStatus('Imaging API unavailable in this Photoshop build', 'error');
+        return;
+      }
       const sel = getSelectionBounds();
       updateDocInfo(doc, !!sel);
 
-      acq = await acquireImDocument(doc);
-      const im = acq.im;
-      let imData = null;
-      try {
-        if (state.source === 'layer') {
-          const layer = im.getActiveLayer ? im.getActiveLayer() : null;
-          const ld = layer && layer.getPixelData ? layer.getPixelData() : null;
-          imData = normalizeImData(ld);
-          if (!imData || !imData.width || !imData.height) {
-            throw new Error('Active layer has no pixel data (try Composite)');
-          }
-        } else {
-          if (typeof im.getPixelData !== 'function') {
-            throw new Error('Composite read not available in this build (try "Active layer only")');
-          }
-          imData = normalizeImData(im.getPixelData());
-        }
-        const total = sampleIntoDoc(imData, sel, doc.width, doc.height);
-        const ms = performance.now() - t0;
-
-        // Rendering
-        if (state.layout === 'split') {
-          applyViewSettings(views.shadows);
-          applyViewSettings(views.mids);
-          applyViewSettings(views.highlights);
-          renderView(views.shadows, 0);
-          renderView(views.mids, 1);
-          renderView(views.highlights, 2);
-        } else {
-          renderMainFromBuffers();
-        }
-
-        // Statistics (over whatever the view shows)
-        const statBufs = state.layout === 'split' || state.tonal === 'global'
-          ? [buffers[0], buffers[1], buffers[2]]
-          : [buffers[state.tonal === 'shadows' ? 0 : state.tonal === 'mids' ? 1 : 2]];
-        const stats = computeStats(statBufs);
-        updateHud(stats, ms, state.sampleSize);
-        setStatus(total > 0
-          ? `sampled in ${Math.round(ms)} ms - ${imData.width}x${imData.height} ${imData.channelOrder}`
-          : 'no pixels in range', total > 0 ? '' : 'error');
-      } finally {
-        // Memory policy: release imaging objects as soon as sampling is done.
-        if (imData && imData.raw && typeof imData.raw.dispose === 'function') imData.raw.dispose();
-        if (typeof im.dispose === 'function') im.dispose();
+      // Layer source: the UXP core Layer exposes an id on current builds.
+      let layerId;
+      if (state.source === 'layer') {
+        const layer = doc.activeLayer;
+        layerId = layer && typeof layer.id === 'number' ? layer.id : undefined;
       }
+
+      norm = await readPixels(doc, layerId);
+      if (!norm) throw new Error('Pixel read returned no data');
+      if (norm.pixelFormat && !/rgb/i.test(norm.pixelFormat) && !/gray/i.test(norm.pixelFormat)) {
+        throw new Error(`Unsupported pixel format '${norm.pixelFormat}' (open the document as RGB)`);
+      }
+
+      // The buffer is a (possibly pyramid-cached) downscale of the whole
+      // document, so selection bounds must be expressed in buffer pixels.
+      let bufSel = null;
+      if (sel) {
+        const sx = norm.width / doc.width;
+        const sy = norm.height / doc.height;
+        bufSel = {
+          left: sel.left * sx, top: sel.top * sy,
+          right: sel.right * sx, bottom: sel.bottom * sy
+        };
+      }
+
+      const total = sampleIntoDoc(norm, bufSel, norm.width, norm.height);
+      const ms = performance.now() - t0;
+
+      // Rendering
+      if (state.layout === 'split') {
+        applyViewSettings(views.shadows);
+        applyViewSettings(views.mids);
+        applyViewSettings(views.highlights);
+        renderView(views.shadows, 0);
+        renderView(views.mids, 1);
+        renderView(views.highlights, 2);
+      } else {
+        renderMainFromBuffers();
+      }
+
+      // Statistics (over whatever the view shows)
+      const statBufs = state.layout === 'split' || state.tonal === 'global'
+        ? [buffers[0], buffers[1], buffers[2]]
+        : [buffers[state.tonal === 'shadows' ? 0 : state.tonal === 'mids' ? 1 : 2]];
+      const stats = computeStats(statBufs);
+      updateHud(stats, ms, state.sampleSize);
+      setStatus(total > 0
+        ? `sampled in ${Math.round(ms)} ms - ${norm.width}x${norm.height} ${norm.pixelFormat || norm.channelOrder}${norm.level >= 0 ? ' lvl' + norm.level : ''}`
+        : 'no pixels in range', total > 0 ? '' : 'error');
     } catch (e) {
       setStatus(`Error: ${e.message}`, 'error');
     } finally {
-      if (acq) acq.cleanup();
       setBusy(false);
     }
   }
