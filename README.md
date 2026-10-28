@@ -166,6 +166,12 @@ Photoshop host; the DevTools workflow above is the practical loop.
 
 ## Troubleshooting
 
+**"Validate command successfull ... Load command failed".** Enable
+**Developer Mode inside Photoshop**: *Plugins > Development > Enable
+Developer Mode*, then **restart Photoshop** and load again from the UXP
+Developer Tool. Recent Photoshop builds refuse to load Developer-Tool-added
+plugins until that switch is on, even though the manifest validates fine.
+
 **"Invalid Manifest File" in the UXP Developer Tool.** The manifest must use
 `manifestVersion: 5` with a *host object* (not an array) and the Photoshop
 `data.apiVersion: 2` flag; the imaging API is reached through the regular
