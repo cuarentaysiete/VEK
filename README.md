@@ -176,9 +176,16 @@ Photoshop host; the DevTools workflow above is the practical loop.
 "manifestVersion": 5
 ```
 
-If your build still rejects it, lower `minVersion` to `"23.0"` and confirm the
-panel loads in *Window > Extensions* inside Photoshop itself (the Developer
-Tool validates a slightly different schema than the host).
+**"Expected the icon to have a 1X scaled file" (Load failed).** Recent
+Photoshop builds validate icon *files* against the declared scale: one icon
+entry per scale factor, each pointing at a file whose pixel size equals
+`width x scale` (e.g. a 23 px logical icon needs both a 23 px file with
+`"scale": [1]` and a 46 px file with `"scale": [2]`). A single file claiming
+`"scale": [1, 2]` fails the check.
+
+If your build still rejects the manifest, lower `minVersion` to `"23.0"` and
+confirm the panel loads in *Window > Extensions* inside Photoshop itself (the
+Developer Tool validates a slightly different schema than the host).
 
 **Panel loads but the scope shows an error.** The HUD status line reports the
 buffer the host actually returned, e.g.
