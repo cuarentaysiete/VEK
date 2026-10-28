@@ -1,6 +1,6 @@
-# VektorShop Vectorscope
+# VektorShop, a vectorscope for Photoshop
 
-An advanced **vectorscope** panel for Adobe Photoshop, built on the **UXP**
+A  **vectorscope** panel for Adobe Photoshop, built on the **UXP**
 extension platform. It gives still-image colorists the circular color-space
 view that video engineers have had for decades: the whole image (or a
 selection, or one tonal range) plotted as Cr/Cb cloud, with phosphor-trace
