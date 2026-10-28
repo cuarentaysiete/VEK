@@ -1,0 +1,10 @@
+{
+  "name": "vektorshop-vectorscope",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Advanced vectorscope panel for Adobe Photoshop (UXP)",
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
