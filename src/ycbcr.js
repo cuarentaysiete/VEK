@@ -10,7 +10,12 @@
  * The full-saturation primary targets therefore land on the outer
  * circle (radius 1.0) at exactly the positions a hardware scope shows.
  */
+(function (g) {
 'use strict';
+
+// UXP runs every <script> of a panel in ONE shared scope, so the file lives
+// in an IIFE; Node (unit tests) is detected via process.versions.node.
+const _isNode = typeof process !== 'undefined' && !!process.versions && !!process.versions.node;
 
 const BT601 = Object.freeze({
   W_R: 0.299,
@@ -125,8 +130,9 @@ const _exports = {
 };
 if (typeof module !== 'undefined') {
   module.exports = _exports;
-} else {
-  // UXP panel: publish to globalThis so sibling scripts (sampling.js,
-  // scope.js) can read the values without re-declaring the bindings.
-  Object.assign(globalThis, _exports);
 }
+// Publish to the panel global so sampling.js / stats.js / scope.js /
+// main.js can read the values as bare names in the shared UXP scope.
+g.VSyc = _exports;
+if (!_isNode) Object.assign(g, _exports);
+})(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -1,0 +1,43 @@
+[2026-10-28 15:50:36:081] [general] Uncaught JS Exception: 
+src/stats.js:1:0
+SyntaxError: Identifier '_yc' has already been declared
+    at e.exports.execScript (uxp://uxp-internal/domjs_scripts.js:2:645469)
+    at l (uxp://uxp-internal/domjs_scripts.js:2:648191)
+    at uxp://uxp-internal/domjs_scripts.js:2:648388
+    at s._executeCallbacks (uxp://uxp-internal/domjs_scripts.js:2:645211)
+    at s._executeIfReady (uxp://uxp-internal/domjs_scripts.js:2:645138)
+    at Array.<anonymous> (uxp://uxp-internal/domjs_scripts.js:2:645627)
+    at s._executeCallbacks (uxp://uxp-internal/domjs_scripts.js:2:645297)
+    at s._executeIfReady (uxp://uxp-internal/domjs_scripts.js:2:645138)
+    at Array.<anonymous> (uxp://uxp-internal/domjs_scripts.js:2:645627)
+    at s._executeCallbacks (uxp://uxp-internal/domjs_scripts.js:2:645297)
+
+
+[2026-10-28 15:50:36:081] [general] Uncaught JS Exception: 
+src/scope.js:1:0
+SyntaxError: Identifier '_yc' has already been declared
+    at e.exports.execScript (uxp://uxp-internal/domjs_scripts.js:2:645469)
+    at l (uxp://uxp-internal/domjs_scripts.js:2:648191)
+    at uxp://uxp-internal/domjs_scripts.js:2:648388
+    at s._executeCallbacks (uxp://uxp-internal/domjs_scripts.js:2:645211)
+    at s._executeIfReady (uxp://uxp-internal/domjs_scripts.js:2:645138)
+    at Array.<anonymous> (uxp://uxp-internal/domjs_scripts.js:2:645627)
+    at s._executeCallbacks (uxp://uxp-internal/domjs_scripts.js:2:645297)
+    at s._executeIfReady (uxp://uxp-internal/domjs_scripts.js:2:645138)
+    at Array.<anonymous> (uxp://uxp-internal/domjs_scripts.js:2:645627)
+    at s._executeCallbacks (uxp://uxp-internal/domjs_scripts.js:2:645297)
+
+
+[2026-10-28 15:50:36:137] [general] Uncaught JS Exception: 
+uxp://uxp-internal/domjs_scripts.js:2:645468
+ReferenceError: ScopeView is not defined
+    at main.js:66:15
+    at main.js:420:3
+    at e.exports.execScript (uxp://uxp-internal/domjs_scripts.js:2:645469)
+    at l (uxp://uxp-internal/domjs_scripts.js:2:648191)
+    at uxp://uxp-internal/domjs_scripts.js:2:648388
+    at s._executeCallbacks (uxp://uxp-internal/domjs_scripts.js:2:645211)
+    at s._executeIfReady (uxp://uxp-internal/domjs_scripts.js:2:645138)
+    at Array.<anonymous> (uxp://uxp-internal/domjs_scripts.js:2:645627)
+    at s._executeCallbacks (uxp://uxp-internal/domjs_scripts.js:2:645297)
+    at s._executeIfReady (uxp://uxp-internal/domjs_scripts.js:2:645138)

@@ -5,15 +5,15 @@
  *   { x: Float32Array, y: Float32Array, luma: Float32Array, n: <count> }
  * Only the first `n` elements are valid.
  */
+(function (g) {
 'use strict';
 
 const HUE_BINS = 36;           // 10 degrees each
 const HUE_DEAD_ZONE = 0.05;    // ignore near-gray points in hue histogram
 
-// ycbcr.js publishes to globalThis in the UXP panel; required in Node.
-const _yc = (typeof module !== 'undefined' && typeof require === 'function')
-  ? require('./ycbcr.js')
-  : globalThis;
+// IIFE + globalThis publishing: see sampling.js header for the rationale.
+const _isNode = typeof process !== 'undefined' && !!process.versions && !!process.versions.node;
+const _yc = _isNode && typeof require === 'function' ? require('./ycbcr.js') : g;
 
 /** Human-friendly hue names, one per 10-degree bin (index 0..35). */
 const HUE_NAMES = Object.freeze([
@@ -78,6 +78,8 @@ function computeStats(buffers) {
   };
 }
 
-if (typeof module !== 'undefined') {
-  module.exports = { computeStats, HUE_NAMES, HUE_BINS, HUE_DEAD_ZONE };
-}
+  const _exports = { computeStats, HUE_NAMES, HUE_BINS, HUE_DEAD_ZONE };
+  g.VSstats = _exports;
+  if (!_isNode) Object.assign(g, _exports);
+  if (typeof module !== 'undefined') module.exports = _exports;
+})(typeof globalThis !== 'undefined' ? globalThis : this);

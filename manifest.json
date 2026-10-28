@@ -1,7 +1,7 @@
 {
   "id": "net.vektorshop.vectorscope",
   "name": "VektorShop Vectorscope",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "main": "index.html",
   "host": {
     "app": "PS",

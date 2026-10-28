@@ -150,16 +150,30 @@ physically impossible in UXP, these decisions were made:
    throttle: the first event after a quiet period samples immediately,
    subsequent events during an active gesture (brush stroke) are dropped
    until 300 ms have passed. This keeps perceived latency low and CPU flat.
-6. **Target year 2026 / API version 2.** Manifest v5, `requiredPhotoShopVersion
-   23.0`, `@photoshop/imaging` (the JS imaging module) - all current.
+6. **Target year 2026 / API version 2.** Manifest v5 with the Photoshop
+   `host` object and `apiVersion: 2`; pixels come from `imaging.getPixels()
+   ({ targetSize })`, which downscales on the Photoshop side, so no
+   full-resolution buffer is ever built in JavaScript.
+7. **IIFE module packaging.** UXP executes every `<script>` of a panel in
+   **one shared global scope** and does not expose CommonJS `require`
+   between local files. Each `src/*.js` is therefore wrapped in an IIFE
+   that publishes its API on `globalThis` (`VSyc`, `VSsampling`, `VSstats`,
+   `VSscope`) and, when running under Node, also sets `module.exports`.
+   `test/uxp-scope.test.js` replays the shared-scope load in a `vm`
+   context to regression-test this.
 
 ## Testing
 
 The color math and statistics are unit-tested in Node (no Photoshop needed):
 
 ```bash
-npm test            # runs test/unit.test.js (node:test, zero dependencies)
+npm test            # test/unit.test.js + test/uxp-scope.test.js (node:test)
 ```
+
+The shared-scope test loads all four `src/` files into a single `vm`
+context without `module` / `require` / `process` - the exact UXP conditions
+that broke the panel in the field ("Identifier '_yc' has already been
+declared").
 
 Full behavior (event timing, imaging module, selection) requires the real
 Photoshop host; the DevTools workflow above is the practical loop.

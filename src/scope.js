@@ -14,6 +14,7 @@
  * Zoom magnifies the whole render around the scope center (white-balance
  * mode): both graticule and plotted data are scaled by `zoom`.
  */
+(function (g) {
 'use strict';
 
 /** Ironbow lookup table, 256 entries, RGB triplets. */
@@ -44,11 +45,9 @@ function buildHeatLut() {
 const HEAT_LUT = buildHeatLut();
 
 // Target/I-line constants: published to globalThis by ycbcr.js in the UXP
-// panel, required in Node tests. Kept as a single handle to avoid
-// re-declaring const bindings that already exist in the shared script scope.
-const _yc = (typeof module !== 'undefined' && typeof require === 'function')
-  ? require('./ycbcr.js')
-  : globalThis;
+// panel, required in Node tests (IIFE rationale: see sampling.js).
+const _isNode = typeof process !== 'undefined' && !!process.versions && !!process.versions.node;
+const _yc = _isNode && typeof require === 'function' ? require('./ycbcr.js') : g;
 
 const GRID_MARGIN = 1.15;   // scope-space half-extent covered by the heat grid
 const TRACE_LUMA_BUCKETS = 8;
@@ -335,6 +334,8 @@ ScopeView.prototype.render = function (x, y, luma, n) {
   this.plot(x, y, luma, n);
 };
 
-if (typeof module !== 'undefined') {
-  module.exports = { ScopeView, HEAT_LUT, GRID_MARGIN, TRACE_LUMA_BUCKETS };
-}
+const _exports = { ScopeView, HEAT_LUT, GRID_MARGIN, TRACE_LUMA_BUCKETS };
+g.VSscope = _exports;
+if (!_isNode) Object.assign(g, _exports);
+if (typeof module !== 'undefined') module.exports = _exports;
+})(typeof globalThis !== 'undefined' ? globalThis : this);

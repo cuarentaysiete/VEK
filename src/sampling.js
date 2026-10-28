@@ -8,14 +8,15 @@
  * An "ImData-shaped" object is anything with:
  *   { width, height, channelOrder, data: Int32Array }
  */
+(function (g) {
 'use strict';
 
-// In the UXP panel, ycbcr.js publishes its API to globalThis; in Node we
-// require it. Kept as a single _yc handle to avoid top-level re-declaration
-// of the const bindings that live in ycbcr.js's shared script scope.
-const _yc = (typeof module !== 'undefined' && typeof require === 'function')
-  ? require('./ycbcr.js')
-  : globalThis;
+// UXP runs every <script> of a panel in ONE shared scope, so the file lives
+// in an IIFE and talks to the others through globalThis. Node (unit tests)
+// is detected via process.versions.node - UXP also defines `module`, so a
+// module check would misroute there.
+const _isNode = typeof process !== 'undefined' && !!process.versions && !!process.versions.node;
+const _yc = _isNode && typeof require === 'function' ? require('./ycbcr.js') : g;
 
 /**
  * Channel byte offsets for the channelOrder value Photoshop reports.
@@ -98,6 +99,8 @@ function sampleInto(imData, sel, srcW, srcH, opts, buffers) {
   return buffers[0].n + buffers[1].n + buffers[2].n;
 }
 
-if (typeof module !== 'undefined') {
-  module.exports = { channelLayout, sampleInto };
-}
+  const _exports = { channelLayout, sampleInto };
+  g.VSsampling = _exports;
+  if (!_isNode) Object.assign(g, _exports);
+  if (typeof module !== 'undefined') module.exports = _exports;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
